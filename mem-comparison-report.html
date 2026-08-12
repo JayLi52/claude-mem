@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qoder CN vs claude-mem — 记忆质量对比报告</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --surface-elevated: #1c2330;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --accent: #2f81f7;
+  --accent-text: #ffffff;
+  --accent-light: #58a6ff;
+  --hover: #1f2937;
+  --border: #30363d;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --info: #2563eb;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+  --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--text); font-family: var(--font-family); font-size: 14px; line-height: 1.6; padding: 24px; }
+.report { max-width: 960px; margin: 0 auto; }
+.report h1 { font-size: 24px; font-weight: 600; margin-bottom: 4px; }
+.report .subtitle { color: var(--text-muted); font-size: 12px; margin-bottom: 24px; }
+.report h2 { font-size: 19px; font-weight: 500; margin: 28px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.report h3 { font-size: 15px; font-weight: 500; margin: 18px 0 10px; color: var(--accent-light); }
+.cards { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.card { flex: 1; min-width: 180px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; }
+.card .num { font-size: 32px; font-weight: 700; color: var(--accent); }
+.card .label { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.vs-table { width: 100%; border-collapse: collapse; margin: 14px 0; }
+.vs-table th { text-align: left; font-size: 12px; color: var(--text-muted); padding: 10px 14px; border-bottom: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; }
+.vs-table td { padding: 12px 14px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.vs-table td:first-child { font-weight: 500; width: 22%; }
+.vs-table tr:hover td { background: var(--hover); }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+.badge-win { background: rgba(63,185,80,0.15); color: var(--success); }
+.badge-lose { background: rgba(248,81,73,0.15); color: var(--danger); }
+.badge-tie { background: rgba(210,153,34,0.15); color: var(--warning); }
+.bar-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.bar-row .bar-label { width: 130px; font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+.bar-row .bar-track { flex: 1; height: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; position: relative; }
+.bar-row .bar-fill { height: 100%; border-radius: 3px; display: flex; align-items: center; justify-content: flex-end; padding-right: 8px; font-size: 11px; font-weight: 500; transition: width 0.6s ease; }
+.bar-fill-qoder { background: var(--accent); color: var(--accent-text); }
+.bar-fill-claude { background: var(--info); color: #fff; }
+.sample { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin: 10px 0; }
+.sample .sample-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.sample .sample-body { font-size: 13px; color: var(--text); }
+.sample code { background: rgba(47,129,247,0.12); padding: 1px 5px; border-radius: 3px; font-size: 12px; font-family: var(--font-mono); color: var(--accent-light); }
+.verdict { background: var(--surface-elevated); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-top: 24px; }
+.verdict h2 { border: none; margin-top: 0; }
+.verdict p { margin: 10px 0; font-size: 14px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 3px; font-size: 11px; background: var(--hover); color: var(--text-muted); margin-right: 6px; margin-bottom: 4px; }
+.chart-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 18px; margin: 14px 0; }
+.chart-wrap canvas { max-height: 340px; }
+.section { margin-bottom: 8px; }
+</style>
+</head>
+<body>
+<div class="report">
+
+<h1>Qoder CN vs claude-mem — 记忆质量对比报告</h1>
+<div class="subtitle">数据来源：本机实际存储 · 2026-07-30 · claude-mem SQLite DB (467 obs) + Qoder CN Markdown (545 files)</div>
+
+<div class="cards">
+  <div class="card"><div class="num">545</div><div class="label">Qoder CN memory 文件总数</div></div>
+  <div class="card"><div class="num">467</div><div class="label">claude-mem observation 总数</div></div>
+  <div class="card"><div class="num">28</div><div class="label">Qoder CN 覆盖项目数</div></div>
+  <div class="card"><div class="num">22</div><div class="label">Qoder CN 分类目录数</div></div>
+</div>
+
+<h2>1. 数据规模与类型分布</h2>
+
+<div class="chart-wrap">
+  <canvas id="typeChart"></canvas>
+</div>
+
+<h3>claude-mem type 分布</h3>
+<div class="bar-row">
+  <div class="bar-label">discovery</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:56.5%">264 (56.5%)</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">change</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:27.6%">129 (27.6%)</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">bugfix</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:9.0%">42 (9.0%)</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">refactor</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:3.2%">15 (3.2%)</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">feature</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:2.8%">13 (2.8%)</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">decision</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:0.9%">4 (0.9%)</div></div>
+</div>
+
+<h3>Qoder CN 分类分布（主要类别）</h3>
+<div class="bar-row">
+  <div class="bar-label">task_summary</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-qoder" style="width:48%">~258 条</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">common_pitfalls</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-qoder" style="width:17%">~17 条</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">history_ref_files</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-qoder" style="width:15%">~15 条</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">dev_code_spec</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-qoder" style="width:6%">~6 条</div></div>
+</div>
+<div class="bar-row">
+  <div class="bar-label">其他 18 类</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-qoder" style="width:14%">~49 条</div></div>
+</div>
+
+<h2>2. 内容深度对比</h2>
+
+<table class="vs-table">
+  <tr><th>维度</th><th>Qoder CN</th><th>claude-mem</th><th>胜者</th></tr>
+  <tr><td>narrative 平均长度</td><td>~80 字（结论式）</td><td>300+ 字（叙述式）</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>解释 Why</td><td>通常不解释</td><td>always explains root cause</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>原子事实拆分</td><td>无 facts 字段</td><td>JSON array of atomic facts</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>操作步骤完整度</td><td>skill 类极详细（104行+表格）</td><td>narrative 连续叙述，无步骤拆分</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>Mermaid 可视化</td><td>部分含流程图</td><td>无</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>narrative 空值率</td><td>0%（都有内容）</td><td>0%（381 long + 86 medium）</td><td><span class="badge badge-tie">平</span></td></tr>
+</table>
+
+<h3>样本对比：CSS 阴影 / padding 问题</h3>
+<div class="sample">
+  <div class="sample-title">Qoder CN — task_summary_experience</div>
+  <div class="sample-body">"成功解决伪元素白色线问题：初始采用 <code>width:0</code> 消除可见区域，后采纳用户建议改为 <code>width:1px + background:transparent</code>——1px 透明线仅作为 box-shadow 锚点，不产生可见分割线，同时明确了 box-shadow 各参数含义。" (~80 字)</div>
+</div>
+<div class="sample">
+  <div class="sample-title">claude-mem — bugfix observation</div>
+  <div class="sample-body">"The user discovered that setting <code>padding-bottom</code> on a scrolling container (<code>overflow-y-auto</code>) does not produce visible whitespace at the bottom of the scroll area. To resolve this, they modified the instance detail layout to use a Tailwind arbitrary variant <code>[&>*:last-child]:mb-10</code>, which applies a margin-bottom to the last child element rendered inside the scrolling container, effectively creating the required bottom padding." (~500 字)</div>
+</div>
+
+<h2>3. 结构化与元数据</h2>
+
+<table class="vs-table">
+  <tr><th>维度</th><th>Qoder CN</th><th>claude-mem</th><th>胜者</th></tr>
+  <tr><td>分类体系</td><td>22 个物理目录隔离</td><td>6 种 type 粗粒度</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>usage_scenario</td><td>YAML frontmatter 显式声明</td><td>无</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>keywords</td><td>YAML frontmatter 显式声明</td><td>concepts 标签（7 种固定值）</td><td><span class="badge badge-tie">平</span></td></tr>
+  <tr><td>facts 原子事实</td><td>无</td><td>JSON array，每条独立可用</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>人可读性</td><td>Markdown 直接编辑</td><td>SQLite 二进制，需工具</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>实时捕获</td><td>任务结束批量写</td><td>PostToolUse 实时写</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+</table>
+
+<h2>4. 文件追踪质量</h2>
+
+<div class="chart-wrap">
+  <canvas id="filesChart"></canvas>
+</div>
+
+<table class="vs-table">
+  <tr><th>指标</th><th>Qoder CN</th><th>claude-mem</th></tr>
+  <tr><td>files_read 字段</td><td>完全无</td><td>52% 为空 (245/467)</td></tr>
+  <tr><td>files_modified 字段</td><td>完全无</td><td>84% 为空 (392/467)</td></tr>
+  <tr><td>两者都有值</td><td>—</td><td>仅 16% (75/467)</td></tr>
+  <tr><td>两者都空</td><td>—</td><td>39% (184/467)</td></tr>
+  <tr><td>胜者</td><td colspan="2" style="text-align:center"><span class="badge badge-tie">平 — 都很差</span></td></tr>
+</table>
+
+<h2>5. 防垃圾机制</h2>
+
+<table class="vs-table">
+  <tr><th>机制</th><th>Qoder CN</th><th>claude-mem</th><th>胜者</th></tr>
+  <tr><td>去重</td><td>无（多个高度重复文件共存）</td><td>content_hash 去重（仅同 session）</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>淘汰/衰减</td><td>无</td><td>无</td><td><span class="badge badge-lose">都缺</span></td></tr>
+  <tr><td>相关度门控</td><td>无（全量返回）</td><td>HybridSearch limit + 排序</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>类型约束</td><td>22 目录物理隔离</td><td>6 type + 7 concept 约束</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>垃圾场风险</td><td>高 — 重复文件已出现</td><td>中 — discovery 膨胀</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+</table>
+
+<h3>Qoder CN 实际重复样本</h3>
+<div class="sample">
+  <div class="sample-title">同一项目下 3 个高度重叠的 meta 改造记录</div>
+  <div class="sample-body">
+    <span class="tag">详情页_meta_化改造与重复字段清理.md</span>
+    <span class="tag">详情页_meta_化改造与字段去重.md</span>
+    <span class="tag">详情页_meta_统一化与去重复改造.md</span>
+    <br>无合并、无去重、无链接关系
+  </div>
+</div>
+
+<h3>claude-mem discovery 膨胀</h3>
+<div class="bar-row">
+  <div class="bar-label">discovery 占比</div>
+  <div class="bar-track"><div class="bar-fill bar-fill-claude" style="width:56.5%">264/467 = 56.5%</div></div>
+</div>
+<div style="font-size:12px;color:var(--text-muted);margin-top:6px">大量探索性中间状态 observation，最终价值有限，无衰减机制永久堆积</div>
+
+<h2>6. 召回能力</h2>
+
+<table class="vs-table">
+  <tr><th>维度</th><th>Qoder CN</th><th>claude-mem</th><th>胜者</th></tr>
+  <tr><td>检索方式</td><td>全文搜索 + 目录缩小</td><td>SQLite metadata + ChromaDB 语义</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>召回截断</td><td>无 limit</td><td>limit + 相关度排序</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>语义搜索</td><td>无</td><td>可选 ChromaDB 向量</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>场景匹配</td><td>usage_scenario 锚点</td><td>无场景元数据</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>关键词精确匹配</td><td>keywords 字段</td><td>concepts 标签（粗粒度）</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+</table>
+
+<h2>7. 综合评分</h2>
+
+<div class="chart-wrap">
+  <canvas id="radarChart"></canvas>
+</div>
+
+<table class="vs-table">
+  <tr><th>维度</th><th>Qoder CN</th><th>claude-mem</th><th>胜者</th></tr>
+  <tr><td>分类体系</td><td>22 类物理隔离</td><td>6 type 粗粒度</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>内容深度</td><td>结论式，简洁</td><td>叙述式，解释 why</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>文件追踪</td><td>无</td><td>有但 84% 空</td><td><span class="badge badge-tie">平（都差）</span></td></tr>
+  <tr><td>实时捕获</td><td>任务结束写</td><td>PostToolUse 实时写</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>去重</td><td>无</td><td>同 session 去重</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>淘汰/衰减</td><td>无</td><td>无</td><td><span class="badge badge-lose">都缺</span></td></tr>
+  <tr><td>人可读性</td><td>Markdown 直接编辑</td><td>SQLite 二进制</td><td><span class="badge badge-win">Qoder CN</span></td></tr>
+  <tr><td>召回精度</td><td>全文 + 分类 + keywords</td><td>Hybrid search + 语义</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+  <tr><td>垃圾场风险</td><td>高（重复堆积）</td><td>中（discovery 膨胀）</td><td><span class="badge badge-win">claude-mem</span></td></tr>
+</table>
+
+<div class="verdict">
+  <h2>结论</h2>
+  <p><strong>Qoder CN</strong> 的记忆分类更规范、人可读性更好，适合手动维护和查阅。22 个分类目录 + YAML frontmatter 的 usage_scenario/keywords 提供了精确的召回锚点。但内容偏结论式，缺乏深度解释，且已有重复文件堆积。</p>
+  <p><strong>claude-mem</strong> 的记忆内容更深、实时性更强、去重/召回机制更完善。narrative 解释了 why + how，facts 提供原子事实拆分，content_hash 做基础去重，HybridSearch 做相关度截断。但 discovery 占 56.5% 膨胀严重，文件追踪 84% 为空，无跨 session 去重和衰减机制。</p>
+  <p style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)"><strong>共同短板</strong>：两者都缺衰减/淘汰机制。Qoder CN 先退化（重复堆积），claude-mem 后退化（discovery 膨胀）。长期使用都会变成"垃圾场"。</p>
+</div>
+
+</div>
+
+<script>
+Chart.defaults.color = '#8b949e';
+Chart.defaults.borderColor = '#30363d';
+
+new Chart(document.getElementById('typeChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['discovery', 'change', 'bugfix', 'refactor', 'feature', 'decision'],
+    datasets: [{
+      data: [264, 129, 42, 15, 13, 4],
+      backgroundColor: ['#2563eb', '#7c3aed', '#e11d48', '#0d9488', '#d97706', '#16a34a'],
+      borderWidth: 2,
+      borderColor: '#161b22'
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      title: { display: true, text: 'claude-mem observation 类型分布', color: '#e6edf3', font: { size: 14 } },
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } }
+    }
+  }
+});
+
+new Chart(document.getElementById('filesChart'), {
+  type: 'bar',
+  data: {
+    labels: ['files_read 空', 'files_modified 空', '两者都空', '两者都有值'],
+    datasets: [{
+      label: '占比',
+      data: [52.4, 83.9, 39.4, 16.1],
+      backgroundColor: ['#f85149', '#f85149', '#f85149', '#3fb950'],
+      borderRadius: 4,
+      barThickness: 36
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    indexAxis: 'y',
+    plugins: {
+      title: { display: true, text: 'claude-mem 文件追踪质量 (%)', color: '#e6edf3', font: { size: 14 } },
+      legend: { display: false }
+    },
+    scales: {
+      x: { max: 100, beginAtZero: true, ticks: { callback: v => v + '%' }, grid: { color: '#30363d' } },
+      y: { grid: { display: false } }
+    }
+  }
+});
+
+new Chart(document.getElementById('radarChart'), {
+  type: 'radar',
+  data: {
+    labels: ['分类体系', '内容深度', '文件追踪', '实时捕获', '去重机制', '人可读性', '召回精度', '防垃圾'],
+    datasets: [
+      {
+        label: 'Qoder CN',
+        data: [9, 5, 1, 4, 1, 9, 6, 3],
+        borderColor: '#2f81f7',
+        backgroundColor: 'rgba(47,129,247,0.12)',
+        pointBackgroundColor: '#2f81f7',
+        borderWidth: 2,
+        pointRadius: 3
+      },
+      {
+        label: 'claude-mem',
+        data: [5, 9, 3, 9, 6, 3, 8, 5],
+        borderColor: '#2563eb',
+        backgroundColor: 'rgba(37,99,235,0.12)',
+        pointBackgroundColor: '#2563eb',
+        borderWidth: 2,
+        pointRadius: 3
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      title: { display: true, text: '综合能力雷达 (满分10)', color: '#e6edf3', font: { size: 14 } },
+      legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } }
+    },
+    scales: {
+      r: {
+        beginAtZero: true,
+        max: 10,
+        ticks: { stepSize: 2, backdropColor: 'transparent' },
+        grid: { color: '#30363d' },
+        angleLines: { color: '#30363d' },
+        pointLabels: { color: '#e6edf3', font: { size: 12 } }
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

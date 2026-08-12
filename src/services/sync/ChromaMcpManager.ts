@@ -1390,6 +1390,27 @@ export class ChromaMcpManager {
   private getSpawnEnv(preflightEnv?: Record<string, string>): Record<string, string> {
     const baseEnv = preflightEnv ? { ...preflightEnv } : ChromaMcpManager.getUvxPreflightEnv();
 
+    // Inject DashScope embedding configuration so the patched chroma-mcp
+    // 'dashscope' embedding function can read them at collection-create time.
+    // See _make_dashscope_embedding_function in chroma_mcp/server.py.
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    const dashscopeKey = settings.CLAUDE_MEM_DASHSCOPE_EMBEDDING_API_KEY;
+    if (dashscopeKey) {
+      baseEnv['DASHSCOPE_EMBEDDING_API_KEY'] = dashscopeKey;
+      baseEnv['DASHSCOPE_EMBEDDING_MODEL'] = settings.CLAUDE_MEM_DASHSCOPE_EMBEDDING_MODEL || 'qwen3.7-text-embedding';
+      baseEnv['DASHSCOPE_EMBEDDING_BASE_URL'] = settings.CLAUDE_MEM_DASHSCOPE_EMBEDDING_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+      baseEnv['DASHSCOPE_EMBEDDING_DIMENSIONS'] = settings.CLAUDE_MEM_DASHSCOPE_EMBEDDING_DIMENSIONS || '1024';
+      // PYTHONPATH ensures usercustomize.py auto-patches chroma_mcp.server
+      // with DashScope embedding support regardless of uv cache directory.
+      const patchDir = `${process.env.HOME}/.claude-mem/python_patches`;
+      const existingPypath = baseEnv['PYTHONPATH'] || '';
+      baseEnv['PYTHONPATH'] = existingPypath ? `${patchDir}:${existingPypath}` : patchDir;
+      logger.info('CHROMA_MCP', 'DashScope embedding env injected for chroma-mcp subprocess', {
+        model: baseEnv['DASHSCOPE_EMBEDDING_MODEL'],
+        dimensions: baseEnv['DASHSCOPE_EMBEDDING_DIMENSIONS']
+      });
+    }
+
     const combinedCertPath = this.getCombinedCertPath();
     if (!combinedCertPath) {
       return baseEnv;

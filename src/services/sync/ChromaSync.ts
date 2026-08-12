@@ -1,5 +1,7 @@
 
 import { ChromaMcpManager } from './ChromaMcpManager.js';
+import { SettingsDefaultsManager } from '../../shared/SettingsDefaultsManager.js';
+import { USER_SETTINGS_PATH } from '../../shared/paths.js';
 import { ChromaSyncState, ProjectWatermarks } from './ChromaSyncState.js';
 import { ParsedObservation, ParsedSummary } from '../../sdk/parser.js';
 // cmem-sdk: keep SessionStore + parseFileList off the SDK's import graph.
@@ -131,9 +133,18 @@ export class ChromaSync {
 
   private async createCollection(): Promise<void> {
     const chromaMcp = ChromaMcpManager.getInstance();
+
+    // Determine embedding function: use 'dashscope' when a DashScope API key
+    // is configured, falling back to 'default' (local ONNX MiniLM-L6-v2).
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    const embeddingFunctionName = settings.CLAUDE_MEM_DASHSCOPE_EMBEDDING_API_KEY
+      ? 'dashscope'
+      : 'default';
+
     try {
       await chromaMcp.callTool('chroma_create_collection', {
-        collection_name: this.collectionName
+        collection_name: this.collectionName,
+        embedding_function_name: embeddingFunctionName
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
