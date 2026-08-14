@@ -133,6 +133,10 @@ export class DataRoutes extends BaseRouteHandler {
       return;
     }
 
+    // Detail fetch = strongest recall signal. Optional call: recall must
+    // never break the read path.
+    this.dbManager.getRecallTracker?.()?.record([observation.id], 'detail');
+
     res.json(observation);
   });
 
@@ -172,6 +176,11 @@ export class DataRoutes extends BaseRouteHandler {
     const store = this.dbManager.getSessionStore();
     const platformSource = this.getOptionalPlatformSourceFromRequest(req);
     const observations = store.getObservationsByIds(ids, { orderBy, limit, project, platformSource });
+
+    // Detail fetch = strongest recall signal: the agent asked for these ids.
+    // Count only rows actually returned (filters/limit may drop some).
+    // Optional call: recall must never break the read path.
+    this.dbManager.getRecallTracker?.()?.record(observations.map(o => o.id), 'detail');
 
     res.json(observations);
   });

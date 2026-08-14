@@ -13,7 +13,7 @@ import { countObservationsByProjects } from '../../../context/ObservationCompile
 import { withObserverHealthWarning } from '../../../context/ContextBuilder.js';
 import { SettingsDefaultsManager } from '../../../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH } from '../../../../shared/paths.js';
-import type { ObservationSearchResult, SessionSummarySearchResult } from '../../../sqlite/types.js';
+import type { ObservationSearchResult, SessionSummarySearchResult, RecallSource } from '../../../sqlite/types.js';
 import { captureEvent } from '../../../telemetry/telemetry.js';
 import { telemetryBuffer } from '../../../telemetry/buffer.js';
 import { proTrialLine } from '../../../../shared/pro-promo.js';
@@ -191,6 +191,8 @@ export class SearchRoutes extends BaseRouteHandler {
         : rawFilePath;
 
     const { observations, sessions } = await orchestrator.findByFile(filePath, query);
+    // All matched observations are rendered into the response text.
+    this.recordRecall(observations, 'search');
     const totalResults = observations.length + sessions.length;
 
     if (totalResults === 0) {
@@ -377,6 +379,13 @@ export class SearchRoutes extends BaseRouteHandler {
       });
     }
 
+    // Recall stats for everything injected into the session-start context.
+    // Tolerate a missing ids array (e.g. older/mocked generators).
+    this.recordRecall(
+      (contextResult.injectedObservationIds ?? []).map(id => ({ id })),
+      'context_inject'
+    );
+
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(contextResult.text);
   });
@@ -400,6 +409,9 @@ export class SearchRoutes extends BaseRouteHandler {
         project,
         limit: String(limit),
         format: 'json',
+        // This route records its own 'semantic_inject' recall below — only the
+        // top-N slice that is actually injected into the prompt counts.
+        recallSource: false,
         ...(platformSource ? { platformSource } : {}),
       });
     } catch (error) {
@@ -415,8 +427,12 @@ export class SearchRoutes extends BaseRouteHandler {
       return;
     }
 
+    const injected = observations.slice(0, limit);
+    // Only the injected slice actually reaches the agent's context.
+    this.recordRecall(injected, 'semantic_inject');
+
     const lines: string[] = ['## Relevant Past Work (semantic match)\n'];
-    for (const obs of observations.slice(0, limit)) {
+    for (const obs of injected) {
       const date = obs.created_at?.slice(0, 10) || '';
       lines.push(`### ${obs.title || 'Observation'} (${date})`);
       if (obs.narrative) lines.push(obs.narrative);
@@ -435,6 +451,12 @@ export class SearchRoutes extends BaseRouteHandler {
       ...(req.query as Record<string, any>),
       platformSource,
     };
+  }
+
+  /** Best-effort recall stats; no-op when the tracker isn't wired. The
+   * optional call keeps recall from ever breaking the search read path. */
+  private recordRecall(observations: Array<{ id?: number | null }>, source: RecallSource): void {
+    this.searchManager.getRecallTracker?.()?.record(observations.map(o => o.id), source);
   }
 
   private handleOnboardingExplainer = this.wrapHandler((_req: Request, res: Response): void => {

@@ -191,7 +191,7 @@ export function withObserverHealthWarning(text: string): string {
 export async function generateContextWithStats(
   input?: ContextInput,
   forHuman: boolean = false
-): Promise<{ text: string; stats: ContextInjectStats | null }> {
+): Promise<{ text: string; stats: ContextInjectStats | null; injectedObservationIds: number[] }> {
   const config = loadContextConfig();
   const cwd = input?.cwd ?? process.cwd();
   const context = getProjectContext(cwd);
@@ -206,7 +206,7 @@ export async function generateContextWithStats(
 
   const rawDb = initializeDatabase();
   if (!rawDb) {
-    return { text: withObserverHealthWarning(''), stats: null };
+    return { text: withObserverHealthWarning(''), stats: null, injectedObservationIds: [] };
   }
 
   try {
@@ -219,7 +219,7 @@ export async function generateContextWithStats(
     const summaries = querySummariesMulti(db, queryProjects, config, platformSource);
 
     if (observations.length === 0 && summaries.length === 0) {
-      return { text: withObserverHealthWarning(renderEmptyState(project, forHuman)), stats: null };
+      return { text: withObserverHealthWarning(renderEmptyState(project, forHuman)), stats: null, injectedObservationIds: [] };
     }
 
     const output = buildContextOutput(
@@ -232,9 +232,13 @@ export async function generateContextWithStats(
       forHuman
     );
 
+    // Every queried observation is rendered into the timeline (full or
+    // title-only), so all of them count as injected. Kept separate from
+    // stats: stats are spread into telemetry, ids must not leak there.
     return {
       text: withObserverHealthWarning(output),
       stats: buildInjectStats(observations, summaries, Boolean(input?.full)),
+      injectedObservationIds: observations.map(o => o.id),
     };
   } finally {
     rawDb.close();

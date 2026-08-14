@@ -40,6 +40,7 @@ export type Component =
   | 'PROCESS'
   | 'PROJECT_NAME'
   | 'QUEUE'
+  | 'RECALL'
   | 'SDK'
   | 'SDK_SPAWN'
   | 'SEARCH'

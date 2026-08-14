@@ -7,16 +7,31 @@ export interface ObservationRow {
   type: 'decision' | 'bugfix' | 'feature' | 'refactor' | 'discovery' | 'change';
   title: string | null;
   subtitle: string | null;
-  facts: string | null; 
+  facts: string | null;
   narrative: string | null;
-  concepts: string | null; 
-  files_read: string | null; 
-  files_modified: string | null; 
+  concepts: string | null;
+  files_read: string | null;
+  files_modified: string | null;
   prompt_number: number | null;
-  discovery_tokens: number; 
+  discovery_tokens: number;
   created_at: string;
   created_at_epoch: number;
+  // Device-local recall statistics (v50). Populated by RecallTracker when the
+  // observation is surfaced to an agent; absent on rows read before migration.
+  recall_count?: number;
+  last_recalled_at_epoch?: number | null;
+  last_recall_source?: RecallSource | null;
 }
+
+/** Where an observation was surfaced to an agent. Strongest signal first:
+ * detail fetch and injections mean the agent definitely saw the content,
+ * search results mean it was at least returned as a candidate. */
+export type RecallSource =
+  | 'search'
+  | 'semantic_inject'
+  | 'context_inject'
+  | 'detail'
+  | 'timeline';
 
 export interface SessionSummaryRow {
   id: number;

@@ -559,7 +559,8 @@ export class WorkerService implements WorkerRef {
         this.dbManager.getSessionStore(),
         this.dbManager.getChromaSync(),
         formattingService,
-        timelineService
+        timelineService,
+        this.dbManager.getRecallTracker()
       );
       this.searchRoutes = new SearchRoutes(searchManager, this.syncClient);
       this.server.registerRoutes(this.searchRoutes);

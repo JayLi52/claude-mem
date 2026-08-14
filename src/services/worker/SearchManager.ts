@@ -3,7 +3,9 @@ import { SessionSearch } from '../sqlite/SessionSearch.js';
 import { SessionStore } from '../sqlite/SessionStore.js';
 import { ChromaSync } from '../sync/ChromaSync.js';
 import { FormattingService } from './FormattingService.js';
+import { RecallTracker } from './RecallTracker.js';
 import { TimelineService } from './TimelineService.js';
+import type { RecallSource } from '../sqlite/types.js';
 import type { TimelineItem } from './TimelineService.js';
 import type { ObservationSearchResult, SessionSummarySearchResult, UserPromptSearchResult } from '../sqlite/types.js';
 import { logger } from '../../utils/logger.js';
@@ -40,7 +42,8 @@ export class SearchManager {
     private sessionStore: SessionStore,
     private chromaSync: ChromaSync | null,
     private formatter: FormattingService,
-    private timelineService: TimelineService
+    private timelineService: TimelineService,
+    private recallTracker: RecallTracker | null = null
   ) {
     this.orchestrator = new SearchOrchestrator(
       sessionSearch,
@@ -51,6 +54,21 @@ export class SearchManager {
 
   getOrchestrator(): SearchOrchestrator {
     return this.orchestrator;
+  }
+
+  getRecallTracker(): RecallTracker | null {
+    return this.recallTracker;
+  }
+
+  /** Record recall stats for surfaced observations unless the caller opted
+   * out (recallSource === false means the caller records its own source). */
+  private recordRecall(
+    observations: Array<{ id?: number | null }>,
+    recallSource: RecallSource | false | undefined
+  ): void {
+    if (!this.recallTracker || recallSource === false || observations.length === 0) return;
+    const source: RecallSource = typeof recallSource === 'string' ? recallSource : 'search';
+    this.recallTracker.record(observations.map(o => o.id), source);
   }
 
   getFormatter(): FormattingService {
@@ -470,7 +488,10 @@ export class SearchManager {
 
   async search(args: any, telemetryOut?: SearchTelemetryEnvelope): Promise<any> {
     const normalized = this.normalizeParams(args);
-    const { query, type, obs_type, concepts, files, format, ...options } = normalized;
+    // recallSource: RecallSource overrides the recorded surface; `false` lets
+    // the caller record its own source (e.g. semantic injection recording the
+    // top-N slice it actually injects). Kept out of `options` on purpose.
+    const { query, type, obs_type, concepts, files, format, recallSource, ...options } = normalized;
     let observations: ObservationSearchResult[] = [];
     let sessions: SessionSummarySearchResult[] = [];
     let prompts: UserPromptSearchResult[] = [];
@@ -617,6 +638,7 @@ export class SearchManager {
     }
 
     if (format === 'json') {
+      this.recordRecall(observations, recallSource);
       return {
         observations,
         sessions,
@@ -678,6 +700,12 @@ export class SearchManager {
     }
 
     const limitedResults = allResults.slice(0, options.limit || 20);
+
+    // Only observations that survived the limit actually reach the agent.
+    this.recordRecall(
+      limitedResults.filter(r => r.type === 'observation').map(r => r.data),
+      recallSource
+    );
 
     const cwd = process.cwd();
     const resultsByDate = groupByDate(limitedResults, item => item.created_at);
@@ -951,6 +979,9 @@ export class SearchManager {
         }]
       };
     }
+
+    // All results are rendered into the response text.
+    this.recordRecall(results, undefined);
 
     const header = `Found ${results.length} observation(s) matching "${query}"\n\n${this.formatter.formatTableHeader()}`;
     const formattedResults = results.map((obs, i) => this.formatter.formatObservationIndex(obs, i));

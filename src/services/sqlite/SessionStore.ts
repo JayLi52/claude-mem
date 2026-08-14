@@ -119,6 +119,7 @@ export class SessionStore {
     this.ensureSyncEntityLedger();
     this.ensureSyncRevisionTextAffinity();
     this.initializeSyncHubLaunchBaseline();
+    this.addObservationRecallStatsColumns();
     this.normalizeConceptTags();
   }
 
@@ -1702,6 +1703,34 @@ export class SessionStore {
     this.db.prepare('INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES (?, ?)').run(26, new Date().toISOString());
   }
 
+  // Device-local recall statistics columns (v50). These track how often an
+  // observation is surfaced to an agent (search / injection / detail fetch) so
+  // low-recall memories can later be pruned. Like relevance_count, these are
+  // device-local usage counters: they are NEVER included in CloudSync row
+  // bodies (see the BODY FIELD MAPPING note in SyncApply) and must never touch
+  // synced_at/sync_rev, or a stats-only update would trigger a content re-push.
+  private addObservationRecallStatsColumns(): void {
+    const columns = this.db.query('PRAGMA table_info(observations)').all() as TableColumnInfo[];
+    const hasRecallCount = columns.some(col => col.name === 'recall_count');
+    const hasLastRecalledAt = columns.some(col => col.name === 'last_recalled_at_epoch');
+    const hasLastRecallSource = columns.some(col => col.name === 'last_recall_source');
+
+    if (hasRecallCount && hasLastRecalledAt && hasLastRecallSource) return;
+
+    if (!hasRecallCount) {
+      this.db.run('ALTER TABLE observations ADD COLUMN recall_count INTEGER DEFAULT 0');
+    }
+    if (!hasLastRecalledAt) {
+      this.db.run('ALTER TABLE observations ADD COLUMN last_recalled_at_epoch INTEGER');
+    }
+    if (!hasLastRecallSource) {
+      this.db.run('ALTER TABLE observations ADD COLUMN last_recall_source TEXT');
+    }
+
+    this.db.prepare('INSERT OR IGNORE INTO schema_versions (version, applied_at) VALUES (?, ?)').run(50, new Date().toISOString());
+    logger.debug('DB', 'Added observation recall stats columns (v50)');
+  }
+
   private ensureMergedIntoProjectColumns(): void {
     const obsCols = this.db
       .query('PRAGMA table_info(observations)')
@@ -2286,6 +2315,38 @@ export class SessionStore {
     const rowMap = new Map(rows.map(r => [r.id, r]));
     const ordered = ids.map(id => rowMap.get(id)).filter((r): r is ObservationSearchResult => !!r);
     return limit ? ordered.slice(0, limit) : ordered;
+  }
+
+  /**
+   * Increment device-local recall statistics for observations.
+   *
+   * Device-local only: this must never touch synced_at/sync_rev, otherwise a
+   * stats-only update would mark the row dirty and CloudSync would re-push the
+   * (unchanged) content. Unknown ids are silently skipped by the WHERE clause.
+   */
+  recordObservationRecalls(
+    recalls: Array<{ id: number; count: number; source: string; atEpoch: number }>
+  ): number {
+    if (recalls.length === 0) return 0;
+
+    const stmt = this.db.prepare(`
+      UPDATE observations
+      SET recall_count = COALESCE(recall_count, 0) + ?,
+          last_recalled_at_epoch = ?,
+          last_recall_source = ?
+      WHERE id = ?
+    `);
+
+    let updated = 0;
+    const tx = this.db.transaction(() => {
+      for (const recall of recalls) {
+        if (!Number.isFinite(recall.id) || recall.count <= 0) continue;
+        const result = stmt.run(recall.count, recall.atEpoch, recall.source, recall.id);
+        updated += result.changes;
+      }
+    });
+    tx();
+    return updated;
   }
 
   getSummaryForSession(memorySessionId: string, platformSource?: string): SummaryDetailRow | null {

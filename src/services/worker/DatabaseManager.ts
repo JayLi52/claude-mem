@@ -5,6 +5,7 @@ import { SessionSearch } from '../sqlite/SessionSearch.js';
 import { openConfiguredSqliteDatabase } from '../sqlite/connection.js';
 import { ChromaSync } from '../sync/ChromaSync.js';
 import { CloudSync } from '../sync/CloudSync.js';
+import { RecallTracker } from './RecallTracker.js';
 import { SettingsDefaultsManager } from '../../shared/SettingsDefaultsManager.js';
 import { USER_SETTINGS_PATH, DB_PATH } from '../../shared/paths.js';
 import { logger } from '../../utils/logger.js';
@@ -16,6 +17,7 @@ export class DatabaseManager {
   private sessionSearch: SessionSearch | null = null;
   private chromaSync: ChromaSync | null = null;
   private cloudSync: CloudSync | null = null;
+  private recallTracker: RecallTracker | null = null;
 
   async initialize(): Promise<void> {
     this.db = openConfiguredSqliteDatabase(DB_PATH);
@@ -27,6 +29,8 @@ export class DatabaseManager {
     // the canonical v2 outbox.
     this.sessionStore = new SessionStore(this.db);
     this.sessionSearch = new SessionSearch(this.db);
+    // Lazy store getter: the tracker outlives close()/re-initialize cycles.
+    this.recallTracker = new RecallTracker(() => this.sessionStore);
 
     const chromaEnabled = settings.CLAUDE_MEM_CHROMA_ENABLED !== 'false';
     if (chromaEnabled) {
@@ -54,6 +58,10 @@ export class DatabaseManager {
 
     this.cloudSync?.stop();
     this.cloudSync = null;
+
+    // Flush pending recall stats before the store/connection go away. Flush
+    // (not stop): the lazy getter lets the tracker survive a re-initialize.
+    this.recallTracker?.flush();
 
     this.sessionStore = null;
     this.sessionSearch = null;
@@ -85,6 +93,13 @@ export class DatabaseManager {
 
   getCloudSync(): CloudSync | null {
     return this.cloudSync;
+  }
+
+  getRecallTracker(): RecallTracker {
+    if (!this.recallTracker) {
+      throw new Error('Database not initialized');
+    }
+    return this.recallTracker;
   }
 
   getConnection(): Database {
