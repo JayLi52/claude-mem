@@ -309,6 +309,13 @@
       overflow: hidden;
     }
 
+    #root {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      min-height: 0;
+    }
+
     .header {
       padding: 16px 24px;
       border-bottom: 1px solid var(--color-border-primary);
@@ -642,8 +649,8 @@
 
     .feed {
       flex: 1;
+      min-height: 0;
       overflow-y: scroll;
-      height: 100vh;
       padding: 24px 18px;
       display: flex;
       justify-content: center;
@@ -2088,6 +2095,151 @@
       background: var(--color-bg-button-hover);
       transform: scale(1.05);
       box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Recall Stats View */
+    .view-tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--color-border-primary);
+      flex-shrink: 0;
+      background: var(--color-bg-primary);
+    }
+    .view-tabs .tab {
+      padding: 8px 16px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-text-muted);
+      transition: all 0.2s;
+    }
+    .view-tabs .tab:hover {
+      color: var(--color-text-primary);
+    }
+    .view-tabs .tab.active {
+      color: var(--color-bg-button);
+      border-bottom-color: var(--color-bg-button);
+    }
+    .recall-stats-view {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 16px 18px 48px;
+      max-width: 1200px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .recall-stats-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .recall-stats-header h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0;
+    }
+    .recall-refresh-btn {
+      padding: 6px 16px;
+      background: var(--color-bg-button);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+    }
+    .recall-refresh-btn:hover {
+      background: var(--color-bg-button-hover);
+    }
+    .recall-refresh-btn:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+    .recall-stats-summary {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    .stat-card {
+      flex: 1;
+      min-width: 120px;
+      background: var(--color-bg-stat);
+      border: 1px solid var(--color-border-primary);
+      border-radius: 8px;
+      padding: 12px 16px;
+      text-align: center;
+    }
+    .stat-card .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    }
+    .stat-card .stat-label {
+      font-size: 11px;
+      color: var(--color-text-muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .recall-stats-table-wrap {
+      overflow-x: auto;
+    }
+    .recall-stats-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .recall-stats-table th {
+      text-align: left;
+      padding: 8px 12px;
+      border-bottom: 2px solid var(--color-border-primary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--color-text-muted);
+    }
+    .recall-stats-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--color-border-primary);
+    }
+    .recall-stats-table tr:hover {
+      background: var(--color-bg-card-hover);
+    }
+    .recall-stats-table .col-id {
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+      color: var(--color-text-muted);
+      white-space: nowrap;
+    }
+    .recall-stats-table .col-title {
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .recall-stats-table .col-count {
+      font-weight: 600;
+      text-align: center;
+    }
+    .recall-stats-loading, .recall-stats-error, .recall-stats-empty {
+      padding: 40px;
+      text-align: center;
+      color: var(--color-text-muted);
+    }
+    .recall-stats-error button {
+      margin-top: 8px;
+      padding: 6px 16px;
+      background: var(--color-bg-button);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
     }
 
     .console-toggle-btn svg {

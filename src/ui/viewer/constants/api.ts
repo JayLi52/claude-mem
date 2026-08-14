@@ -4,4 +4,5 @@ export const API_ENDPOINTS = {
   PROMPTS: '/api/prompts',
   SETTINGS: '/api/settings',
   STREAM: '/stream',
+  RECALL_STATS: '/api/recall-stats',
 } as const;

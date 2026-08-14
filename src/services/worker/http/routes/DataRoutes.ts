@@ -95,6 +95,7 @@ export class DataRoutes extends BaseRouteHandler {
     app.delete('/api/prompt/:id', this.handleDeletePrompt.bind(this));
 
     app.get('/api/stats', this.handleGetStats.bind(this));
+    app.get('/api/recall-stats', this.handleGetRecallStats.bind(this));
     app.get('/api/projects', this.handleGetProjects.bind(this));
 
     app.get('/api/processing-status', this.handleGetProcessingStatus.bind(this));
@@ -536,6 +537,76 @@ export class DataRoutes extends BaseRouteHandler {
     res.json({
       success: true,
       stats
+    });
+  });
+
+  // Recall statistics: which memories get surfaced most / least, so low-recall
+  // observations can be identified for future pruning. Returns items sorted by
+  // recall_count DESC plus aggregate summary (total / recalled / total_recalls).
+  private handleGetRecallStats = this.wrapHandler((req: Request, res: Response): void => {
+    const project = DataRoutes.firstString(req.query.project);
+    const limit = Math.min(Math.max(parseInt(DataRoutes.firstString(req.query.limit) || '50', 10) || 50, 1), 500);
+    const minRecall = Math.max(parseInt(DataRoutes.firstString(req.query.minRecall) || '0', 10) || 0, 0);
+
+    const db = this.dbManager.getSessionStore().db;
+
+    const conditions: string[] = [`COALESCE(o.recall_count, 0) >= ?`];
+    const params: any[] = [minRecall];
+
+    if (project) {
+      conditions.push('o.project = ?');
+      params.push(project);
+    }
+
+    const whereClause = conditions.join(' AND ');
+
+    const items = db.prepare(`
+      SELECT
+        o.id, o.project, o.type, o.title, o.subtitle,
+        COALESCE(o.recall_count, 0) as recall_count,
+        o.last_recall_source,
+        o.last_recalled_at_epoch,
+        o.created_at_epoch
+      FROM observations o
+      WHERE ${whereClause}
+      ORDER BY o.recall_count DESC
+      LIMIT ?
+    `).all(...params, limit) as Array<{
+      id: number;
+      project: string;
+      type: string;
+      title: string | null;
+      subtitle: string | null;
+      recall_count: number;
+      last_recall_source: string | null;
+      last_recalled_at_epoch: number | null;
+      created_at_epoch: number;
+    }>;
+
+    const summaryParams = project ? [project] : [];
+    const summaryRow = db.prepare(`
+      SELECT
+        COUNT(*) as total,
+        SUM(CASE WHEN COALESCE(recall_count, 0) > 0 THEN 1 ELSE 0 END) as recalled,
+        COALESCE(SUM(recall_count), 0) as total_recalls,
+        COALESCE(MAX(recall_count), 0) as max_recalls
+      FROM observations
+      ${project ? 'WHERE project = ?' : ''}
+    `).get(...summaryParams) as {
+      total: number;
+      recalled: number;
+      total_recalls: number;
+      max_recalls: number;
+    } | undefined;
+
+    res.json({
+      items,
+      summary: {
+        total: summaryRow?.total ?? 0,
+        recalled: summaryRow?.recalled ?? 0,
+        total_recalls: summaryRow?.total_recalls ?? 0,
+        max_recalls: summaryRow?.max_recalls ?? 0,
+      },
     });
   });
 

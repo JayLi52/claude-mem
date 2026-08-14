@@ -92,3 +92,27 @@ export interface Settings {
   CLAUDE_MEM_CONTEXT_SHOW_LAST_SUMMARY?: string;
   CLAUDE_MEM_CONTEXT_SHOW_LAST_MESSAGE?: string;
 }
+
+export interface RecallStatItem {
+  id: number;
+  project: string;
+  type: string;
+  title: string | null;
+  subtitle: string | null;
+  recall_count: number;
+  last_recall_source: string | null;
+  last_recalled_at_epoch: number | null;
+  created_at_epoch: number;
+}
+
+export interface RecallStatsSummary {
+  total: number;
+  recalled: number;
+  total_recalls: number;
+  max_recalls: number;
+}
+
+export interface RecallStatsResponse {
+  items: RecallStatItem[];
+  summary: RecallStatsSummary;
+}
