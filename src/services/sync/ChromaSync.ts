@@ -1037,8 +1037,16 @@ export class ChromaSync {
     const rawMetadatas = results?.metadatas?.[0] || [];
     const rawDistances = results?.distances?.[0] || [];
 
+    // Distance threshold: ChromaDB returns nearest neighbors regardless of
+    // relevance, so a query with no semantic match still returns junk.  Filter
+    // by squared-L2 distance — 0=identical, ~1.0=strong, ~1.5=weak, ~2.0=orthogonal.
+    // A value of 0 disables filtering (back-compat with old behavior).
+    const settings = SettingsDefaultsManager.loadFromFile(USER_SETTINGS_PATH);
+    const maxDistance = parseFloat(settings.CLAUDE_MEM_CHROMA_MAX_DISTANCE) || 0;
+
     const metadatas: any[] = [];
     const distances: number[] = [];
+    let droppedByDistance = 0;
 
     for (let i = 0; i < docIds.length; i++) {
       const docId = docIds[i];
@@ -1063,10 +1071,21 @@ export class ChromaSync {
         const dedupeKey = `${entityType}:${sqliteId}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
+
+        const dist = rawDistances[i] ?? 0;
+        if (maxDistance > 0 && dist > maxDistance) {
+          droppedByDistance++;
+          continue;
+        }
+
         ids.push(sqliteId);
         metadatas.push(rawMetadatas[i] ?? null);
-        distances.push(rawDistances[i] ?? 0);
+        distances.push(dist);
       }
+    }
+
+    if (droppedByDistance > 0) {
+      logger.debug('CHROMA_SYNC', `Filtered ${droppedByDistance} result(s) by distance threshold (>${maxDistance})`, { project: this.project });
     }
 
     return { ids, distances, metadatas };

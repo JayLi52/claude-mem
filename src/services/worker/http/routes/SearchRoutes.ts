@@ -379,12 +379,11 @@ export class SearchRoutes extends BaseRouteHandler {
       });
     }
 
-    // Recall stats for everything injected into the session-start context.
-    // Tolerate a missing ids array (e.g. older/mocked generators).
-    this.recordRecall(
-      (contextResult.injectedObservationIds ?? []).map(id => ({ id })),
-      'context_inject'
-    );
+    // NOTE: SessionStart context injection is a recency-ordered dump (up to
+    // 50 most recent observations) with no semantic relevance.  Counting
+    // it as recall would inflate recall_count for recent observations on
+    // every session start, drowning out the signals that actually matter
+    // (semantic_inject, search, detail).  Deliberately NOT tracked.
 
     res.setHeader('Content-Type', 'text/plain; charset=utf-8');
     res.send(contextResult.text);

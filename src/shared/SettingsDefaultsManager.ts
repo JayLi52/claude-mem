@@ -79,6 +79,7 @@ export interface SettingsDefaults {
   CLAUDE_MEM_CHROMA_DATABASE: string;
   CLAUDE_MEM_CHROMA_PREWARM_TIMEOUT_MS: string;
   CLAUDE_MEM_CHROMA_MAX_PENDING_MUTATIONS: string;
+  CLAUDE_MEM_CHROMA_MAX_DISTANCE: string;
   // DashScope online embedding model (replaces local ONNX MiniLM-L6-v2).
   // When CLAUDE_MEM_DASHSCOPE_EMBEDDING_API_KEY is set, ChromaSync creates
   // collections with embedding_function_name='dashscope' instead of 'default'.
@@ -181,6 +182,7 @@ export class SettingsDefaultsManager {
     CLAUDE_MEM_CHROMA_DATABASE: 'default_database',
     CLAUDE_MEM_CHROMA_PREWARM_TIMEOUT_MS: '120000',
     CLAUDE_MEM_CHROMA_MAX_PENDING_MUTATIONS: '5000', // Bound burst imports without changing normal live indexing
+    CLAUDE_MEM_CHROMA_MAX_DISTANCE: '1.5', // Max squared-L2 distance for relevant results; higher = more permissive. 0=identical, ~1.0=strong match, ~1.5=weak match, ~2.0=orthogonal. Set to '0' to disable filtering.
     // DashScope online embedding: empty by default. When API key is populated,
     // chroma-mcp uses the 'dashscope' embedding function (OpenAI-compatible API
     // calling qwen3.7-text-embedding) instead of the local ONNX MiniLM-L6-v2.

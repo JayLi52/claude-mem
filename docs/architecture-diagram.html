@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>claude-mem 架构图</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2331;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --accent2: #f0883e;
+    --accent3: #56d364;
+    --accent4: #bc8cff;
+    --accent5: #ff7b72;
+    --accent6: #79c0ff;
+    --shadow: 0 2px 8px rgba(0,0,0,0.3);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    padding: 40px 24px;
+    line-height: 1.6;
+  }
+  .container { max-width: 1200px; margin: 0 auto; }
+
+  h1 {
+    text-align: center;
+    font-size: 28px;
+    margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent4));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+    margin-bottom: 40px;
+  }
+
+  /* Layer section */
+  .layer-group {
+    margin-bottom: 32px;
+  }
+  .layer-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .layer-label::before {
+    content: '';
+    width: 24px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+    opacity: 0.5;
+  }
+
+  /* Card grid */
+  .card-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    box-shadow: var(--shadow);
+    position: relative;
+    transition: transform 0.15s, border-color 0.15s;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: var(--accent);
+  }
+  .card h3 {
+    font-size: 15px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card .icon { font-size: 18px; }
+  .card p {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .card .tag {
+    display: inline-block;
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 99px;
+    margin-top: 6px;
+    font-weight: 600;
+  }
+
+  /* Color-coded cards */
+  .card.host { border-color: var(--accent4); }
+  .card.host h3 { color: var(--accent4); }
+  .card.host .tag { background: rgba(188,140,255,0.15); color: var(--accent4); }
+
+  .card.hook { border-color: var(--accent2); }
+  .card.hook h3 { color: var(--accent2); }
+  .card.hook .tag { background: rgba(240,136,62,0.15); color: var(--accent2); }
+
+  .card.cli { border-color: var(--accent5); }
+  .card.cli h3 { color: var(--accent5); }
+  .card.cli .tag { background: rgba(255,123,114,0.15); color: var(--accent5); }
+
+  .card.worker { border-color: var(--accent); }
+  .card.worker h3 { color: var(--accent); }
+  .card.worker .tag { background: rgba(88,166,255,0.15); color: var(--accent); }
+
+  .card.server { border-color: var(--accent3); }
+  .card.server h3 { color: var(--accent3); }
+  .card.server .tag { background: rgba(86,211,100,0.15); color: var(--accent3); }
+
+  .card.storage { border-color: var(--accent6); }
+  .card.storage h3 { color: var(--accent6); }
+  .card.storage .tag { background: rgba(121,192,255,0.15); color: var(--accent6); }
+
+  .card.mcp { border-color: var(--accent4); }
+  .card.mcp h3 { color: var(--accent4); }
+  .card.mcp .tag { background: rgba(188,140,255,0.15); color: var(--accent4); }
+
+  .card.ui { border-color: var(--accent3); }
+  .card.ui h3 { color: var(--accent3); }
+  .card.ui .tag { background: rgba(86,211,100,0.15); color: var(--accent3); }
+
+  /* Arrow connectors */
+  .arrow-section {
+    display: flex;
+    justify-content: center;
+    padding: 10px 0;
+  }
+  .arrow-down {
+    width: 2px;
+    height: 28px;
+    background: var(--border);
+    position: relative;
+  }
+  .arrow-down::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: -5px;
+    width: 0; height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--border);
+  }
+  .arrow-label {
+    position: absolute;
+    left: 14px;
+    top: 4px;
+    font-size: 10px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  /* Runtime split container */
+  .runtime-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    position: relative;
+  }
+  .runtime-box {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+    background: var(--surface);
+  }
+  .runtime-box.worker-box { border-color: rgba(88,166,255,0.3); }
+  .runtime-box.server-box { border-color: rgba(86,211,100,0.3); }
+  .runtime-box > h2 {
+    font-size: 16px;
+    margin-bottom: 14px;
+    text-align: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .runtime-box.worker-box > h2 { color: var(--accent); }
+  .runtime-box.server-box > h2 { color: var(--accent3); }
+
+  .runtime-box .card { margin-bottom: 10px; }
+  .runtime-box .card:last-child { margin-bottom: 0; }
+
+  /* Split arrow */
+  .split-arrow {
+    position: absolute;
+    top: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+  .split-arrow .line-h {
+    width: 50%;
+    height: 2px;
+    background: var(--border);
+  }
+  .split-arrow .line-left {
+    position: absolute;
+    left: -25%;
+    width: 25%;
+    height: 2px;
+    background: var(--border);
+    top: 0;
+  }
+  .split-arrow .line-right {
+    position: absolute;
+    right: -25%;
+    width: 25%;
+    height: 2px;
+    background: var(--border);
+    top: 0;
+  }
+  .split-arrow .line-down-left {
+    position: absolute;
+    left: -25%;
+    top: 0;
+    width: 2px;
+    height: 20px;
+    background: var(--border);
+  }
+  .split-arrow .line-down-right {
+    position: absolute;
+    right: -25%;
+    top: 0;
+    width: 2px;
+    height: 20px;
+    background: var(--border);
+  }
+
+  /* Data flow section */
+  .flow-section {
+    margin-top: 48px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 28px;
+  }
+  .flow-section h2 {
+    font-size: 18px;
+    margin-bottom: 20px;
+    color: var(--accent);
+  }
+  .flow-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .flow-step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .flow-step strong { color: var(--accent); }
+  .flow-arrow {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  /* Build pipeline */
+  .build-section {
+    margin-top: 32px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .build-section h2 {
+    font-size: 16px;
+    margin-bottom: 16px;
+    color: var(--accent2);
+  }
+  .build-pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .build-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+  .build-node .src { color: var(--text-dim); font-size: 10px; }
+  .build-node .out { color: var(--accent3); font-size: 10px; margin-top: 2px; }
+  .build-arrow { color: var(--text-dim); }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 40px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+  }
+
+  /* Hook events table */
+  .hook-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+    font-size: 12px;
+  }
+  .hook-table th {
+    text-align: left;
+    color: var(--text-dim);
+    font-weight: 600;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .hook-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(48,54,61,0.5);
+  }
+  .hook-table tr:hover td {
+    background: rgba(88,166,255,0.05);
+  }
+
+  .section-title {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    margin-top: 8px;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 40px 0;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>claude-mem 架构图</h1>
+<p class="subtitle">Persistent Memory Compression System for Claude Code · v13.15.0</p>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent4)"></div>Host / MCP</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>Hook Lifecycle</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent5)"></div>CLI / Orchestration</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent)"></div>Worker Runtime</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent3)"></div>Server Runtime</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--accent6)"></div>Storage</div>
+</div>
+
+<!-- ==================== Layer 1: Host ==================== -->
+<div class="layer-group">
+  <div class="layer-label" style="color:var(--accent4)">Layer 1 — Host / IDE</div>
+  <div class="card-row">
+    <div class="card host" style="min-width:200px">
+      <h3><span class="icon">🤖</span>Claude Code</h3>
+      <p>主宿主环境，触发 5 个生命周期 Hook + MCP Client</p>
+      <span class="tag">Primary Host</span>
+    </div>
+    <div class="card host" style="min-width:140px">
+      <h3><span class="icon">📝</span>Codex</h3>
+      <p>codex-hooks.json</p>
+    </div>
+    <div class="card host" style="min-width:140px">
+      <h3><span class="icon">🖱️</span>Cursor</h3>
+      <p>cursor-hooks/</p>
+    </div>
+    <div class="card host" style="min-width:140px">
+      <h3><span class="icon">🌊</span>Windsurf</h3>
+      <p>Integrations</p>
+    </div>
+  </div>
+</div>
+
+<div class="arrow-section">
+  <div class="arrow-down"></div>
+</div>
+
+<!-- ==================== Layer 2: Hook Lifecycle ==================== -->
+<div class="layer-group">
+  <div class="layer-label" style="color:var(--accent2)">Layer 2 — Hook Lifecycle（5 Events）</div>
+  <div class="card-row">
+    <div class="card hook" style="min-width:160px">
+      <h3>SessionStart</h3>
+      <p>启动 Worker + 注入上下文</p>
+      <span class="tag">60s</span>
+    </div>
+    <div class="card hook" style="min-width:160px">
+      <h3>UserPromptSubmit</h3>
+      <p>注册 Session + 启动 SDK Agent + 语义注入</p>
+      <span class="tag">60s</span>
+    </div>
+    <div class="card hook" style="min-width:160px">
+      <h3>PostToolUse</h3>
+      <p>捕获工具使用 → 异步入队</p>
+      <span class="tag">120s async</span>
+    </div>
+    <div class="card hook" style="min-width:160px">
+      <h3>PreToolUse (Read)</h3>
+      <p>智能文件读取</p>
+      <span class="tag">60s async</span>
+    </div>
+    <div class="card hook" style="min-width:160px">
+      <h3>Stop</h3>
+      <p>请求会话摘要</p>
+      <span class="tag">120s async</span>
+    </div>
+  </div>
+</div>
+
+<div class="arrow-section">
+  <div class="arrow-down"><span class="arrow-label">hooks.json</span></div>
+</div>
+
+<!-- ==================== Layer 3: CLI / Orchestration ==================== -->
+<div class="layer-group">
+  <div class="layer-label" style="color:var(--accent5)">Layer 3 — CLI / Orchestration</div>
+  <div class="card-row">
+    <div class="card cli" style="min-width:240px">
+      <h3><span class="icon">⚡</span>bun-runner.js</h3>
+      <p>Node→Bun 桥接，定位最新插件版本</p>
+    </div>
+    <div class="card cli" style="min-width:280px">
+      <h3><span class="icon">🎛️</span>hook-command.ts</h3>
+      <p>Hook 编排器 — 优雅降级：传输错误→exit 0（不阻塞）；客户端 Bug→exit 2（阻塞）</p>
+      <span class="tag">Graceful Degradation</span>
+    </div>
+    <div class="card cli" style="min-width:200px">
+      <h3><span class="icon">📦</span>npx claude-mem</h3>
+      <p>安装 CLI: install / repair / server / doctor</p>
+      <span class="tag">dist/npx-cli/</span>
+    </div>
+  </div>
+</div>
+
+<div class="arrow-section">
+  <div class="arrow-down"><span class="arrow-label">runtime-selector.ts</span></div>
+</div>
+
+<!-- ==================== Layer 4: Runtime Split ==================== -->
+<div class="layer-group">
+  <div class="layer-label" style="color:var(--accent)">Layer 4 — Runtime（双模式：同一 Hook 契约，两套运行时）</div>
+
+  <div class="runtime-split">
+    <!-- Worker Runtime -->
+    <div class="runtime-box worker-box">
+      <h2>⚙️ Worker Runtime（单用户）</h2>
+
+      <div class="card worker">
+        <h3>worker-service.cjs</h3>
+        <p>主 Worker 守护进程 — Express HTTP API · Port 37700+(uid%100)</p>
+      </div>
+      <div class="card worker">
+        <h3>SessionManager</h3>
+        <p>会话生命周期管理 · SDK 子进程跟踪 · 2 种 SessionId 映射</p>
+      </div>
+      <div class="card worker">
+        <h3>SDKAgent + ResponseProcessor</h3>
+        <p>Claude Agent SDK → LLM 压缩 → 结构化 Observation</p>
+        <span class="tag">Claude / Gemini / OpenRouter</span>
+      </div>
+      <div class="card worker">
+        <h3>SearchManager</h3>
+        <p>SearchOrchestrator · Chroma/Hybrid/SQLite 三策略</p>
+      </div>
+      <div class="card worker">
+        <h3>ContextBuilder</h3>
+        <p>Token 预算管理 · Observation 编译 · Header/Footer 渲染</p>
+      </div>
+      <div class="card worker">
+        <h3>Knowledge Agent</h3>
+        <p>CorpusBuilder / Store / Renderer — 知识语料库</p>
+      </div>
+      <div class="card worker">
+        <h3>RecallTracker</h3>
+        <p>记忆召回计数 · 内存批处理 + 防抖写入 · Schema v50</p>
+      </div>
+      <div class="card worker">
+        <h3>SSEBroadcaster</h3>
+        <p>实时 Observation 流推送到 Viewer UI</p>
+      </div>
+    </div>
+
+    <!-- Server Runtime -->
+    <div class="runtime-box server-box">
+      <h2>🌐 Server Runtime — server-beta（多租户）</h2>
+
+      <div class="card server">
+        <h3>server-service.cjs</h3>
+        <p>Server 守护进程 — Express · Port 37877+(uid%100) · API-Key 认证</p>
+      </div>
+      <div class="card server">
+        <h3>Auth Middleware</h3>
+        <p>BetterAuth + SQLite API-Key · 三元组: api_key_id × actor_id × request_id</p>
+      </div>
+      <div class="card server">
+        <h3>IngestEventsService</h3>
+        <p>事务性写入: agent_events + outbox + audit_log（Postgres）</p>
+        <span class="tag">Transactional Outbox</span>
+      </div>
+      <div class="card server">
+        <h3>SessionGenerationPolicy</h3>
+        <p>判断是否需要触发 LLM 生成 · 幂等</p>
+      </div>
+      <div class="card server">
+        <h3>ProviderObservationGenerator</h3>
+        <p>BullMQ 异步队列 · 确定性 Job ID · 幂等重试</p>
+        <span class="tag">Claude / Gemini / OpenRouter</span>
+      </div>
+      <div class="card server">
+        <h3>Compat Adapters</h3>
+        <p>SessionsObservationsAdapter — 旧 /api/sessions/* → 新 /v1 翻译</p>
+      </div>
+      <div class="card server">
+        <h3>ServerV1Routes</h3>
+        <p>/v1/projects · /v1/sessions · /v1/events · /v1/memories · /v1/search</p>
+      </div>
+      <div class="card server">
+        <h3>Generation Worker</h3>
+        <p>ActiveServerGenerationWorkerManager — 水平扩展的后台生成进程</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="arrow-section">
+  <div class="arrow-down"><span class="arrow-label">read / write</span></div>
+</div>
+
+<!-- ==================== Layer 5: Storage ==================== -->
+<div class="layer-group">
+  <div class="layer-label" style="color:var(--accent6)">Layer 5 — Storage（三数据库 + 向量库）</div>
+  <div class="card-row">
+    <div class="card storage" style="min-width:220px">
+      <h3><span class="icon">🗃️</span>Worker SQLite</h3>
+      <p>~/.claude-mem/claude-mem.db</p>
+      <p style="margin-top:4px">sdk_sessions · observations · session_summaries · pending_messages · sync_outbox</p>
+      <span class="tag">Schema v50 · ~30 migrations</span>
+    </div>
+    <div class="card storage" style="min-width:220px">
+      <h3><span class="icon">🗄️</span>Server SQLite</h3>
+      <p>server-beta SQLite backend</p>
+      <p style="margin-top:4px">projects · teams · server_sessions · memory_items (FTS5) · api_keys · audit_log</p>
+      <span class="tag">Schema v33</span>
+    </div>
+    <div class="card storage" style="min-width:220px">
+      <h3><span class="icon">🐘</span>Postgres</h3>
+      <p>多租户 Server backend</p>
+      <p style="margin-top:4px">observations (GIN 全文索引) · observation_generation_jobs · usage_events · rate_limit_counters</p>
+      <span class="tag">PHASE_1_SCHEMA</span>
+    </div>
+    <div class="card storage" style="min-width:200px">
+      <h3><span class="icon">🔮</span>ChromaDB</h3>
+      <p>~/.claude-mem/chroma/</p>
+      <p style="margin-top:4px">向量嵌入 — narrative + fact 文档 · 通过 chroma-mcp (stdio)</p>
+      <span class="tag">Semantic Search</span>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ==================== MCP Server ==================== -->
+<div class="layer-group">
+  <div class="section-title" style="color:var(--accent4)">📡 MCP Server（独立进程 · stdio）</div>
+  <div class="card-row">
+    <div class="card mcp" style="min-width:200px">
+      <h3>mcp-server.cjs</h3>
+      <p>plugin/.mcp.json 启动 · 4 个工具</p>
+    </div>
+    <div class="card mcp" style="min-width:160px">
+      <h3>search</h3>
+      <p>索引 + ID 列表</p>
+    </div>
+    <div class="card mcp" style="min-width:160px">
+      <h3>timeline</h3>
+      <p>时间线上下文</p>
+    </div>
+    <div class="card mcp" style="min-width:180px">
+      <h3>get_observations</h3>
+      <p>按 ID 批量获取全文</p>
+    </div>
+    <div class="card mcp" style="min-width:180px">
+      <h3>session_start_context</h3>
+      <p>渲染 SessionStart 注入</p>
+    </div>
+  </div>
+  <p style="text-align:center; color:var(--text-dim); font-size:12px; margin-top:8px">
+    三层 token 高效工作流：search(索引) → timeline(上下文) → get_observations(全文)
+  </p>
+</div>
+
+<div class="divider"></div>
+
+<!-- ==================== UI Viewer ==================== -->
+<div class="layer-group">
+  <div class="section-title" style="color:var(--accent3)">🖥️ UI Viewer（React 19 SPA）</div>
+  <div class="card-row">
+    <div class="card ui" style="min-width:180px">
+      <h3>viewer-bundle.js</h3>
+      <p>构建后部署到 plugin/ui/</p>
+      <span class="tag">Express / static</span>
+    </div>
+    <div class="card ui" style="min-width:140px">
+      <h3>Feed</h3>
+      <p>Observation 流</p>
+    </div>
+    <div class="card ui" style="min-width:140px">
+      <h3>useSSE</h3>
+      <p>实时推送 Hook</p>
+    </div>
+    <div class="card ui" style="min-width:140px">
+      <h3>RecallStatsView</h3>
+      <p>召回统计</p>
+    </div>
+    <div class="card ui" style="min-width:140px">
+      <h3>CorpusRoutes</h3>
+      <p>知识语料管理</p>
+    </div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ==================== Data Flow ==================== -->
+<div class="flow-section">
+  <h2>🔄 数据流 — Worker 模式</h2>
+  <div class="flow-steps">
+    <div class="flow-step"><strong>UserPromptSubmit</strong> → session-init</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">POST /api/sessions/init + /api/context/semantic</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step"><strong>PostToolUse</strong> → observation handler</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">POST /api/sessions/observations</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">PendingMessageStore.enqueue()</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">SDKAgent (LLM 压缩)</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">storeObservations → SQLite</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">ChromaSync → ChromaDB</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">SSE → Viewer UI</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step"><strong>Stop</strong> → summarize</div>
+  </div>
+</div>
+
+<div style="height:24px"></div>
+
+<div class="flow-section">
+  <h2>🔄 数据流 — Server 模式</h2>
+  <div class="flow-steps">
+    <div class="flow-step"><strong>Hook</strong> → bun-runner</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">worker-service.cjs</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">runtime-selector</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">ServerBetaClient.recordEvent()</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">POST /v1/events (X-API-Key)</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">Auth + IngestEvents</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">Postgres + Outbox</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">BullMQ Queue (幂等 Job)</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">ProviderObservationGenerator</div>
+    <div class="flow-arrow">▶</div>
+    <div class="flow-step">persist + audit</div>
+  </div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ==================== Build Pipeline ==================== -->
+<div class="build-section">
+  <h2>🔨 构建管线 — esbuild × 6 entry points</h2>
+  <div class="build-pipeline">
+    <div class="build-node">
+      <div><strong>worker-service.ts</strong></div>
+      <div class="src">src/services/</div>
+      <div class="out">→ plugin/scripts/worker-service.cjs (2.9MB)</div>
+    </div>
+    <div class="build-arrow">▶</div>
+    <div class="build-node">
+      <div><strong>ServerService.ts</strong></div>
+      <div class="src">src/server/runtime/</div>
+      <div class="out">→ plugin/scripts/server-service.cjs (2.1MB)</div>
+    </div>
+    <div class="build-arrow">▶</div>
+    <div class="build-node">
+      <div><strong>mcp-server.ts</strong></div>
+      <div class="src">src/servers/</div>
+      <div class="out">→ plugin/scripts/mcp-server.cjs (337KB)</div>
+    </div>
+    <div class="build-arrow">▶</div>
+    <div class="build-node">
+      <div><strong>context-generator.ts</strong></div>
+      <div class="src">src/services/</div>
+      <div class="out">→ plugin/scripts/context-generator.cjs</div>
+    </div>
+    <div class="build-arrow">▶</div>
+    <div class="build-node">
+      <div><strong>transcript-watcher-entry.ts</strong></div>
+      <div class="src">src/services/transcripts/</div>
+      <div class="out">→ plugin/scripts/transcript-watcher.cjs</div>
+    </div>
+    <div class="build-arrow">▶</div>
+    <div class="build-node">
+      <div><strong>npx-cli/index.ts</strong></div>
+      <div class="src">src/npx-cli/</div>
+      <div class="out">→ dist/npx-cli/index.js (ESM bin)</div>
+    </div>
+  </div>
+  <p style="color:var(--text-dim); font-size:12px; margin-top:12px">
+    build-viewer.js → React viewer → plugin/ui/viewer-bundle.js · sync_marketplace.cjs → ~/.claude/plugins/marketplaces/
+  </p>
+</div>
+
+<div class="divider"></div>
+
+<!-- ==================== Hook Events Detail ==================== -->
+<div class="layer-group">
+  <div class="section-title">📋 Hook 生命周期与处理器映射</div>
+  <table class="hook-table">
+    <thead>
+      <tr>
+        <th>Event</th>
+        <th>Handler</th>
+        <th>用途</th>
+        <th>超时</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Setup</td><td>version-check.js</td><td>版本标记检查；不匹配时提示 npx claude-mem repair</td><td>300s</td></tr>
+      <tr><td>SessionStart</td><td>context</td><td>启动 Worker + 注入历史上下文</td><td>60s</td></tr>
+      <tr><td>UserPromptSubmit</td><td>session-init</td><td>注册 Session + 启动 SDK Agent + 语义注入</td><td>60s</td></tr>
+      <tr><td>PostToolUse</td><td>observation</td><td>捕获工具使用记录 → 异步入队 Worker</td><td>120s async</td></tr>
+      <tr><td>PreToolUse (Read)</td><td>file-context</td><td>智能文件读取，增强上下文</td><td>60s async</td></tr>
+      <tr><td>Stop</td><td>summarize</td><td>请求会话摘要生成</td><td>120s async</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div style="height:48px"></div>
+
+<p style="text-align:center; color:var(--text-dim); font-size:12px">
+  claude-mem v13.15.0 · Apache-2.0 · github.com/thedotmack/claude-mem
+</p>
+
+</div>
+</body>
+</html>
