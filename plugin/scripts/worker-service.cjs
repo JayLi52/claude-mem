@@ -2162,7 +2162,7 @@ ${o}`}function vS(t){let e,r;try{e=typeof t.tool_input=="string"?JSON.parse(t.to
 If a <parameters> or <outcome> block above contains an "<elided chars=... />" marker, that field was truncated to fit the observer's context window. Describe only what you can see in the kept portion and do not infer details about the elided range.
 
 Return either one or more <observation>...</observation> blocks, or an empty response if this tool use should be skipped.
-Concrete debugging findings from logs, queue state, database rows, session routing, or code-path inspection count as durable discoveries and should be recorded.
+Concrete debugging findings from logs, queue state, database rows, session routing, or code-path inspection are durable only when they change the understanding of the task - record the conclusion, not the probe. Routine waypoints (locating a file or module, confirming a field's type or unit, a read that matched expectations, an environment/port detail check) should be skipped; when several recent tool calls served one investigation, record its conclusion once instead of per call.
 Never reply with prose such as "Skipping", "No substantive tool executions", or any explanation outside XML. Non-XML text is discarded.`}function _S(t,e){let r=t.last_assistant_message||(g.error("SDK","Missing last_assistant_message in session for summary prompt",{sessionId:t.id}),"");return`--- ${dPe} ---
 \u26A0\uFE0F CRITICAL TAG REQUIREMENT \u2014 READ CAREFULLY:
 \u2022 You MUST wrap your ENTIRE response in <summary>...</summary> tags.
