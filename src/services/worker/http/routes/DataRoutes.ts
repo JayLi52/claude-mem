@@ -599,6 +599,43 @@ export class DataRoutes extends BaseRouteHandler {
       max_recalls: number;
     } | undefined;
 
+    // Age-stratified recall: lifetime "recalled / total" gets diluted by stale
+    // memories and can't tell a retrieval problem apart from normal corpus
+    // aging. Bucketing by memory age does: a low rate on RECENT memories means
+    // writes/retrieval are mismatched, while a low rate on OLD memories just
+    // means they're prune candidates.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const nowEpoch = Date.now();
+    const bucketDefs = [
+      { label: '≤7d', startMs: nowEpoch - 7 * DAY_MS, endMs: nowEpoch },
+      { label: '8-30d', startMs: nowEpoch - 30 * DAY_MS, endMs: nowEpoch - 7 * DAY_MS },
+      { label: '31-90d', startMs: nowEpoch - 90 * DAY_MS, endMs: nowEpoch - 30 * DAY_MS },
+      { label: '>90d', startMs: 0, endMs: nowEpoch - 90 * DAY_MS },
+    ];
+    const ageBuckets = bucketDefs.map((bucket) => {
+      const bucketParams: number[] = [bucket.startMs, bucket.endMs];
+      if (project) bucketParams.push(project);
+      const row = db.prepare(`
+        SELECT
+          COUNT(*) as total,
+          SUM(CASE WHEN COALESCE(recall_count, 0) > 0 THEN 1 ELSE 0 END) as recalled,
+          COALESCE(SUM(recall_count), 0) as total_recalls
+        FROM observations
+        WHERE created_at_epoch >= ? AND created_at_epoch < ?
+        ${project ? 'AND project = ?' : ''}
+      `).get(...bucketParams) as {
+        total: number;
+        recalled: number;
+        total_recalls: number;
+      } | undefined;
+      return {
+        label: bucket.label,
+        total: row?.total ?? 0,
+        recalled: row?.recalled ?? 0,
+        total_recalls: row?.total_recalls ?? 0,
+      };
+    });
+
     res.json({
       items,
       summary: {
@@ -607,6 +644,7 @@ export class DataRoutes extends BaseRouteHandler {
         total_recalls: summaryRow?.total_recalls ?? 0,
         max_recalls: summaryRow?.max_recalls ?? 0,
       },
+      age_buckets: ageBuckets,
     });
   });
 

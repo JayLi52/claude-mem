@@ -112,7 +112,15 @@ export interface RecallStatsSummary {
   max_recalls: number;
 }
 
+export interface RecallStatsAgeBucket {
+  label: string;
+  total: number;
+  recalled: number;
+  total_recalls: number;
+}
+
 export interface RecallStatsResponse {
   items: RecallStatItem[];
   summary: RecallStatsSummary;
+  age_buckets?: RecallStatsAgeBucket[];
 }
